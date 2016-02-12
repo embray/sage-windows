@@ -26,7 +26,7 @@ ENV KITEMATIC_VERSION 0.10.0
 ENV VIRTUALBOX_VERSION 5.0.14
 ENV VIRTUALBOX_REVISION 105127
 ENV GIT_VERSION 2.7.0
-ENV MIXPANEL_TOKEN c306ae65c33d7d09fe3e546f36493a6e
+#ENV MIXPANEL_TOKEN c306ae65c33d7d09fe3e546f36493a6e
 
 RUN mkdir /bundle
 WORKDIR /bundle
@@ -56,4 +56,5 @@ COPY windows /installer
 
 WORKDIR /installer
 RUN rm -rf /tmp/.wine-0/
-RUN wine ../innosetup/ISCC.exe Toolbox.iss /DMyAppVersion=$INSTALLER_VERSION /DMixpanelToken=$MIXPANEL_TOKEN
+#RUN wine ../innosetup/ISCC.exe Toolbox.iss /DMyAppVersion=$INSTALLER_VERSION /DMixpanelToken=$MIXPANEL_TOKEN
+RUN wine ../innosetup/ISCC.exe Toolbox.iss /DMyAppVersion=$INSTALLER_VERSION

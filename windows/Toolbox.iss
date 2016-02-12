@@ -95,7 +95,7 @@ Root: HKCU; Subkey: "Environment"; ValueType:string; ValueName:"DOCKER_TOOLBOX_I
 
 var
   TrackingDisabled: Boolean;
-  TrackingCheckBox: TNewCheckBox;
+//  TrackingCheckBox: TNewCheckBox;
 
 function uuid(): String;
 var
@@ -148,7 +148,8 @@ begin
     properties := ', ' + properties;
 
   try
-    payload := Encode64(Format(ExpandConstant('{{"event": "%s", "properties": {{"token": "{#MixpanelToken}", "distinct_id": "%s", "os": "win32", "os version": "%s", "version": "{#MyAppVersion}" %s}}'), [name, uuid(), WindowsVersionString(), properties]));
+//    payload := Encode64(Format(ExpandConstant('{{"event": "%s", "properties": {{"token": "{#MixpanelToken}", "distinct_id": "%s", "os": "win32", "os version": "%s", "version": "{#MyAppVersion}" %s}}'), [name, uuid(), WindowsVersionString(), properties]));
+    payload := '';
     WinHttpReq := CreateOleObject('WinHttp.WinHttpRequest.5.1');
     WinHttpReq.Open('POST', 'https://api.mixpanel.com/track/?data=' + payload, false);
     WinHttpReq.SetRequestHeader('Content-Type', 'application/json');
@@ -189,33 +190,33 @@ end;
 procedure InitializeWizard;
 var
   WelcomePage: TWizardPage;
-  TrackingLabel: TLabel;
+//  TrackingLabel: TLabel;
 begin
-
+  TrackingDisabled := True;  // Remove this if we re-enable tracking
   WelcomePage := PageFromID(wpWelcome)
 
   WizardForm.WelcomeLabel2.AutoSize := True;
 
-  TrackingCheckBox := TNewCheckBox.Create(WizardForm);
-  TrackingCheckBox.Top := WizardForm.WelcomeLabel2.Top + WizardForm.WelcomeLabel2.Height + 10;
-  TrackingCheckBox.Left := WizardForm.WelcomeLabel2.Left;
-  TrackingCheckBox.Width := WizardForm.WelcomeLabel2.Width;
-  TrackingCheckBox.Height := 28;
-  TrackingCheckBox.Caption := 'Help Docker improve Toolbox.';
-  TrackingCheckBox.Checked := True;
-  TrackingCheckBox.Parent := WelcomePage.Surface;
+//  TrackingCheckBox := TNewCheckBox.Create(WizardForm);
+//  TrackingCheckBox.Top := WizardForm.WelcomeLabel2.Top + WizardForm.WelcomeLabel2.Height + 10;
+//  TrackingCheckBox.Left := WizardForm.WelcomeLabel2.Left;
+//  TrackingCheckBox.Width := WizardForm.WelcomeLabel2.Width;
+//  TrackingCheckBox.Height := 28;
+//  TrackingCheckBox.Caption := 'Help Docker improve Toolbox.';
+//  TrackingCheckBox.Checked := True;
+//  TrackingCheckBox.Parent := WelcomePage.Surface;
 
-  TrackingLabel := TLabel.Create(WizardForm);
-  TrackingLabel.Parent := WelcomePage.Surface;
-  TrackingLabel.Font := WizardForm.WelcomeLabel2.Font;
-  TrackingLabel.Font.Color := clGray;
-  TrackingLabel.Caption := 'This collects anonymous data to help us detect installation problems and improve the overall experience. We only use it to aggregate statistics and will never share it with third parties.';
-  TrackingLabel.WordWrap := True;
-  TrackingLabel.Visible := True;
-  TrackingLabel.Left := WizardForm.WelcomeLabel2.Left;
-  TrackingLabel.Width := WizardForm.WelcomeLabel2.Width;
-  TrackingLabel.Top := TrackingCheckBox.Top + TrackingCheckBox.Height + 5;
-  TrackingLabel.Height := 100;
+//  TrackingLabel := TLabel.Create(WizardForm);
+//  TrackingLabel.Parent := WelcomePage.Surface;
+//  TrackingLabel.Font := WizardForm.WelcomeLabel2.Font;
+//  TrackingLabel.Font.Color := clGray;
+//  TrackingLabel.Caption := 'This collects anonymous data to help us detect installation problems and improve the overall experience. We only use it to aggregate statistics and will never share it with third parties.';
+//  TrackingLabel.WordWrap := True;
+//  TrackingLabel.Visible := True;
+//  TrackingLabel.Left := WizardForm.WelcomeLabel2.Left;
+//  TrackingLabel.Width := WizardForm.WelcomeLabel2.Width;
+//  TrackingLabel.Top := TrackingCheckBox.Top + TrackingCheckBox.Height + 5;
+//  TrackingLabel.Height := 100;
 
     // Don't do this until we can compare versions
     // Wizardform.ComponentsList.Checked[3] := NeedToInstallVirtualBox();
@@ -232,7 +233,8 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   if CurPageID = wpWelcome then begin
-      if TrackingCheckBox.Checked then begin
+      //if TrackingCheckBox.Checked then begin
+      if False then begin
         TrackEventWithProperties('Continued from Overview', '"Tracking Enabled": "Yes"');
         TrackingDisabled := False;
         DeleteFile(ExpandConstant('{userdocs}\..\.docker\machine\no-error-report'));
