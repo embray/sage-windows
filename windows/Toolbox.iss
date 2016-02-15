@@ -1,7 +1,7 @@
-#define MyAppName "Docker Toolbox"
-#define MyAppPublisher "Docker"
-#define MyAppURL "https://docker.com"
-#define MyAppContact "https://docker.com"
+#define MyAppName "SageMath Windows"
+#define MyAppPublisher "SageMath"
+#define MyAppURL "http://www.sagemath.org/"
+#define MyAppContact "http://www.sagemath.org/"
 
 #define b2dIsoPath "..\bundle\boot2docker.iso"
 #define dockerCli "..\bundle\docker.exe"
@@ -12,7 +12,7 @@
 
 [Setup]
 AppCopyright={#MyAppPublisher}
-AppId={{FC4417F0-D7F3-48DB-BCE1-F5ED5BAFFD91}
+AppId={{723D6855-C02C-42AE-92E7-8DFEDA411195}
 AppContact={#MyAppContact}
 AppComments={#MyAppURL}
 AppName={#MyAppName}
@@ -24,9 +24,9 @@ AppUpdatesURL={#MyAppURL}
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 DefaultDirName={pf}\{#MyAppName}
-DefaultGroupName=Docker
+DefaultGroupName=SageMath
 DisableProgramGroupPage=yes
-OutputBaseFilename=DockerToolbox
+OutputBaseFilename=SageMath
 Compression=lzma
 SolidCompression=yes
 WizardImageFile=windows-installer-side.bmp
