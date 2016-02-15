@@ -3,6 +3,7 @@
 #define MyAppURL "http://www.sagemath.org/"
 #define MyAppContact "http://www.sagemath.org/"
 
+#define SageGroupName "SageMath"
 #define b2dIsoPath "..\bundle\boot2docker.iso"
 #define dockerCli "..\bundle\docker.exe"
 #define dockerMachineCli "..\bundle\docker-machine.exe"
@@ -24,7 +25,7 @@ AppUpdatesURL={#MyAppURL}
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 DefaultDirName={pf}\{#MyAppName}
-DefaultGroupName=SageMath
+DefaultGroupName={#SageGroupName}
 DisableProgramGroupPage=yes
 OutputBaseFilename=SageMath
 Compression=lzma
@@ -44,7 +45,7 @@ Name: "full"; Description: "Full installation"
 Name: "custom"; Description: "Custom installation"; Flags: iscustom
 
 [Run]
-Filename: "{win}\explorer.exe"; Parameters: "{userprograms}\Docker\"; Flags: postinstall skipifsilent; Description: "View Shortcuts in File Explorer"
+Filename: "{win}\explorer.exe"; Parameters: "{userprograms}\{#SageGroupName}\"; Flags: postinstall skipifsilent; Description: "View Shortcuts in File Explorer"
 
 [Tasks]
 Name: desktopicon; Description: "{cm:CreateDesktopIcon}"
