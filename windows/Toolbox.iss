@@ -8,7 +8,6 @@
 #define dockerMachineCli "..\bundle\docker-machine.exe"
 #define dockerComposeCli "..\bundle\docker-compose.exe"
 #define kitematic "..\bundle\kitematic"
-#define git "..\bundle\Git.exe"
 #define virtualBoxCommon "..\bundle\common.cab"
 #define virtualBoxMsi "..\bundle\VirtualBox_amd64.msi"
 
@@ -59,26 +58,20 @@ Name: "DockerMachine"; Description: "Docker Machine for Windows" ; Types: full c
 Name: "DockerCompose"; Description: "Docker Compose for Windows" ; Types: full custom
 Name: "VirtualBox"; Description: "VirtualBox"; Types: full custom; Flags: disablenouninstallwarning
 Name: "Kitematic"; Description: "Kitematic for Windows (Alpha)" ; Types: full custom
-Name: "Git"; Description: "Git for Windows"; Types: full custom; Flags: disablenouninstallwarning
 
 [Files]
-Source: ".\docker-quickstart-terminal.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#dockerCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
-Source: ".\start.sh"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
 Source: ".\Start-DockerMachine.ps1"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
 Source: "{#dockerMachineCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "DockerMachine"
 Source: "{#dockerComposeCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "DockerCompose"
 Source: "{#kitematic}\*"; DestDir: "{app}\kitematic"; Flags: ignoreversion recursesubdirs; Components: "Kitematic"
 Source: "{#b2dIsoPath}"; DestDir: "{app}"; Flags: ignoreversion; Components: "DockerMachine"; AfterInstall: CopyBoot2DockerISO()
-Source: "{#git}"; DestDir: "{app}\installers\git"; DestName: "git.exe"; AfterInstall: RunInstallGit();  Components: "Git"
 Source: "{#virtualBoxCommon}"; DestDir: "{app}\installers\virtualbox"; Components: "VirtualBox"
 Source: "{#virtualBoxMsi}"; DestDir: "{app}\installers\virtualbox"; DestName: "virtualbox.msi"; AfterInstall: RunInstallVirtualBox(); Components: "VirtualBox"
 
 [Icons]
 Name: "{userprograms}\Docker\Kitematic (Alpha)"; WorkingDir: "{app}"; Filename: "{app}\kitematic\Kitematic.exe"; Components: "Kitematic"
 Name: "{commondesktop}\Kitematic (Alpha)"; WorkingDir: "{app}"; Filename: "{app}\kitematic\Kitematic.exe"; Tasks: desktopicon; Components: "Kitematic"
-Name: "{userprograms}\Docker\Docker Quickstart Terminal"; WorkingDir: "{app}"; Filename: "{pf64}\Git\bin\bash.exe"; Parameters: "--login -i ""{app}\start.sh"""; IconFilename: "{app}/docker-quickstart-terminal.ico"; Components: "Docker"
-Name: "{commondesktop}\Docker Quickstart Terminal"; WorkingDir: "{app}"; Filename: "{pf64}\Git\bin\bash.exe"; Parameters: "--login -i ""{app}\start.sh"""; IconFilename: "{app}/docker-quickstart-terminal.ico"; Tasks: desktopicon; Components: "Docker"
 
 [UninstallRun]
 Filename: "{app}\docker-machine.exe"; Parameters: "rm -f default"
@@ -181,12 +174,6 @@ begin
     Result := GetEnv('VBOX_MSI_INSTALL_PATH')
 end;
 
-function NeedToInstallGit(): Boolean;
-begin
-  // TODO: Find a better way to see if Git is installed
-  Result := not DirExists('C:\Program Files\Git') or not FileExists('C:\Program Files\Git\git-bash.exe')
-end;
-
 procedure InitializeWizard;
 var
   WelcomePage: TWizardPage;
@@ -221,7 +208,6 @@ begin
     // Don't do this until we can compare versions
     // Wizardform.ComponentsList.Checked[3] := NeedToInstallVirtualBox();
     Wizardform.ComponentsList.ItemEnabled[3] := not NeedToInstallVirtualBox();
-    Wizardform.ComponentsList.Checked[5] := NeedToInstallGit();
 end;
 
 function InitializeSetup(): boolean;
@@ -255,22 +241,6 @@ begin
   WizardForm.FilenameLabel.Caption := 'installing VirtualBox'
   if not Exec(ExpandConstant('msiexec'), ExpandConstant('/qn /i "{app}\installers\virtualbox\virtualbox.msi" /norestart'), '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
     MsgBox('virtualbox install failure', mbInformation, MB_OK);
-end;
-
-procedure RunInstallGit();
-var
-  ResultCode: Integer;
-begin
-  WizardForm.FilenameLabel.Caption := 'installing Git for Windows'
-  if Exec(ExpandConstant('{app}\installers\git\git.exe'), '/sp- /verysilent /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-  begin
-    // handle success if necessary; ResultCode contains the exit code
-    //MsgBox('git installed OK', mbInformation, MB_OK);
-  end
-  else begin
-    // handle failure if necessary; ResultCode contains the error code
-    MsgBox('git install failure', mbInformation, MB_OK);
-  end;
 end;
 
 procedure CopyBoot2DockerISO();
