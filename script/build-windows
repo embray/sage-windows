@@ -3,7 +3,12 @@
 set -e
 
 docker build -t windows-installer -f Dockerfile.windows .
-CONTAINER="$(docker run -d windows-installer)"
+IMAGES="$(pwd)/images"
+# TODO: On Windows, if IMAGES is not under /C/Users we must
+# perform some additional steps to mount the directory it is
+# under as a sharedfolder in VirtualBox, and then to mount it
+# inside the boot2docker VM as well.
+CONTAINER="$(docker run -v ${IMAGES}:/images -v /var/run/docker.sock:/var/run/docker.sock windows-installer)"
 mkdir -p dist
-docker cp "${CONTAINER}":/installer/Output/SageMath.exe dist/
+docker cp "${CONTAINER}":/installer/Output/ dist/
 docker rm "${CONTAINER}" 2>/dev/null || true

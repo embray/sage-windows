@@ -24,10 +24,11 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
-DefaultDirName={pf}\{#MyAppName}
+DefaultDirName={pf}\{#SageGroupName}
 DefaultGroupName={#SageGroupName}
 DisableProgramGroupPage=yes
-OutputBaseFilename=SageMath
+DiskSpanning=yes
+OutputBaseFilename={#SageGroupName}
 Compression=lzma
 SolidCompression=yes
 WizardImageFile=windows-installer-side.bmp
@@ -53,19 +54,19 @@ Name: modifypath; Description: "Add docker binaries to &PATH"
 Name: upgradevm; Description: "Upgrade Boot2Docker VM"
 
 [Components]
-Name: "Docker"; Description: "Docker Client for Windows" ; Types: full custom; Flags: fixed
-Name: "DockerMachine"; Description: "Docker Machine for Windows" ; Types: full custom; Flags: fixed
-//Name: "DockerCompose"; Description: "Docker Compose for Windows" ; Types: full custom
-Name: "VirtualBox"; Description: "VirtualBox"; Types: full custom; Flags: disablenouninstallwarning
+Name: "VirtualBox"; Description: "VirtualBox"; Types: full custom; Flags: fixed disablenouninstallwarning
+Name: "Docker"; Description: "Docker for Windows" ; Types: full custom; Flags: fixed
+Name: "SageMath"; Description: "SageMath image for Docker"; Types: full custom; Flags: fixed
 
 [Files]
 Source: "{#dockerCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
 Source: ".\Start-DockerMachine.ps1"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
-Source: "{#dockerMachineCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "DockerMachine"
-//Source: "{#dockerComposeCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "DockerCompose"
-Source: "{#b2dIsoPath}"; DestDir: "{app}"; Flags: ignoreversion; Components: "DockerMachine"; AfterInstall: CopyBoot2DockerISO()
+Source: "{#dockerMachineCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
+//Source: "{#dockerComposeCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
+Source: "{#b2dIsoPath}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"; AfterInstall: CopyBoot2DockerISO()
 Source: "{#virtualBoxCommon}"; DestDir: "{app}\installers\virtualbox"; Components: "VirtualBox"
 Source: "{#virtualBoxMsi}"; DestDir: "{app}\installers\virtualbox"; DestName: "virtualbox.msi"; AfterInstall: RunInstallVirtualBox(); Components: "VirtualBox"
+Source: "{#SageMathImageArchive}"; DestDir: "{app}\images"; DestName: sagemath.tar.bz2; Components: "SageMath"
 
 [UninstallRun]
 Filename: "{app}\docker-machine.exe"; Parameters: "rm -f default"
@@ -76,6 +77,11 @@ Root: HKCU; Subkey: "Environment"; ValueType:string; ValueName:"DOCKER_TOOLBOX_I
 [Code]
 #include "base64.iss"
 #include "guid.iss"
+
+const
+  // TODO: Maybe InnoSetup has a nicer way to do this built-in
+  VirtualBoxComponent = 0;
+  DockerComponent = 1;
 
 var
   TrackingDisabled: Boolean;
@@ -165,9 +171,31 @@ begin
     Result := GetEnv('VBOX_MSI_INSTALL_PATH')
 end;
 
+function DockerPath(): String;
+var
+  Path: String;
+begin
+  if RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'DOCKER_TOOLBOX_INSTALL_PATH', Path) then
+    Result := Path
+  else
+    Result := '';
+end;
+
+function NeedToInstallDocker(): Boolean;
+begin
+  // TODO: Should also attempt to run the docker CLI and check the
+  // client and server versions (if the CLI even runs successfully)
+  if DockerPath() = '' then
+    Result := True
+  else
+    Result := False;
+end;
+
 procedure InitializeWizard;
 var
   WelcomePage: TWizardPage;
+  InstallDockerCaption: String;
+  InstallVBoxCaption: String;
 //  TrackingLabel: TLabel;
 begin
   TrackingDisabled := True;  // Remove this if we re-enable tracking
@@ -196,9 +224,34 @@ begin
 //  TrackingLabel.Top := TrackingCheckBox.Top + TrackingCheckBox.Height + 5;
 //  TrackingLabel.Height := 100;
 
-    // Don't do this until we can compare versions
-    // Wizardform.ComponentsList.Checked[3] := NeedToInstallVirtualBox();
-    Wizardform.ComponentsList.ItemEnabled[3] := not NeedToInstallVirtualBox();
+// TODO: It seems to me the following two optional component install
+// routines could be made into a general procedure
+
+  InstallDockerCaption := Wizardform.ComponentsList.ItemCaption[DockerComponent];
+
+  if NeedToInstallDocker() then
+  begin
+    Wizardform.ComponentsList.Checked[DockerComponent] := True;
+  end else begin
+    InstallDockerCaption := InstallDockerCaption + ' (already installed)';
+    Wizardform.ComponentsList.Checked[DockerComponent] := False;
+  end;
+
+  Wizardform.ComponentsList.ItemCaption[DockerComponent] := InstallDockerCaption;
+
+  InstallVBoxCaption := Wizardform.ComponentsList.ItemCaption[VirtualBoxComponent];
+  // Don't do this until we can compare versions
+  // Wizardform.ComponentsList.Checked[VirtualBoxComponent] := NeedToInstallVirtualBox();
+  if NeedToInstallVirtualBox() then
+  begin
+    Wizardform.ComponentsList.Checked[VirtualBoxComponent] := True;
+  end else begin
+    InstallVBoxCaption := InstallVBoxCaption + ' (already installed)';
+    Wizardform.ComponentsList.Checked[VirtualBoxComponent] := False;
+  end;
+
+  Wizardform.ComponentsList.ItemCaption[VirtualBoxComponent] := InstallVBoxCaption;
+    
 end;
 
 function InitializeSetup(): boolean;

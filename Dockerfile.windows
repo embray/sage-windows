@@ -1,10 +1,21 @@
+# To use this Dockerfile efficiently run
+# docker run -v /var/run/docker.sock:/var/run/docker.sock \
+#     $(docker build -f Dockerfile.windows .)
+
 FROM debian:jessie
 
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN dpkg --add-architecture i386
 RUN sed -i "s/main/main contrib non-free/" etc/apt/sources.list
-RUN apt-get update && apt-get install -yq wine curl unrar unzip
+
+
+# add the docker PPA
+RUN apt-get update && apt-get install -yq apt-transport-https
+RUN apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
+RUN echo "deb https://apt.dockerproject.org/repo debian-jessie main" > /etc/apt/sources.list.d/docker.list
+
+RUN apt-get update && apt-get install -yq wine curl unrar unzip bzip2 docker-engine
 
 # innosetup
 RUN mkdir innosetup && \
@@ -24,7 +35,14 @@ ENV DOCKER_COMPOSE_VERSION 1.6.0
 ENV BOOT2DOCKER_ISO_VERSION $DOCKER_VERSION
 ENV VIRTUALBOX_VERSION 5.0.14
 ENV VIRTUALBOX_REVISION 105127
+ENV SAGE_IMAGE_NAME sagemath-jupyter
+ENV SAGE_IMAGE_TAG latest
 #ENV MIXPANEL_TOKEN c306ae65c33d7d09fe3e546f36493a6e
+
+# docker images
+# Mount a local directory as a volume to /images when running this image to avoid 
+# having to recreate image archives (time consuming!)
+RUN mkdir /images
 
 RUN mkdir /bundle
 WORKDIR /bundle
@@ -49,4 +67,9 @@ COPY windows /installer
 WORKDIR /installer
 RUN rm -rf /tmp/.wine-0/
 #RUN wine ../innosetup/ISCC.exe Toolbox.iss /DMyAppVersion=$INSTALLER_VERSION /DMixpanelToken=$MIXPANEL_TOKEN
-RUN wine ../innosetup/ISCC.exe Toolbox.iss /DMyAppVersion=$INSTALLER_VERSION
+# TODO: This is hideous--put this in a separate script to run
+CMD docker pull sagemath/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG} && \
+        ( [ -f "/images/${SAGE_IMAGE_NAME}-$(docker images -q sagemath/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG}).tar.bz2" ] || \
+        docker save sagemath/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG} | bzip2 -z > /images/${SAGE_IMAGE_NAME}-$(docker images -q sagemath/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG}).tar.bz2 ) && \
+	wine ../innosetup/ISCC.exe Toolbox.iss /DMyAppVersion=$INSTALLER_VERSION \
+        /DSageMathImageArchive="..\\images\\${SAGE_IMAGE_NAME}-$(docker images -q sagemath/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG}).tar.bz2"

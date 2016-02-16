@@ -1,6 +1,7 @@
 # XCode projects
 .DS_Store
 build/
+images/
 *.pbxuser
 !default.pbxuser
 *.mode1v3
