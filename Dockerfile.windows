@@ -35,8 +35,10 @@ ENV DOCKER_COMPOSE_VERSION 1.6.0
 ENV BOOT2DOCKER_ISO_VERSION $DOCKER_VERSION
 ENV VIRTUALBOX_VERSION 5.0.14
 ENV VIRTUALBOX_REVISION 105127
+ENV SAGE_IMAGE_ORG sagemath
 ENV SAGE_IMAGE_NAME sagemath-jupyter
 ENV SAGE_IMAGE_TAG latest
+ENV SAGE_IMAGE_FULL ${SAGE_IMAGE_ORG}/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG}
 #ENV MIXPANEL_TOKEN c306ae65c33d7d09fe3e546f36493a6e
 
 # docker images
@@ -67,9 +69,4 @@ COPY windows /installer
 WORKDIR /installer
 RUN rm -rf /tmp/.wine-0/
 #RUN wine ../innosetup/ISCC.exe Toolbox.iss /DMyAppVersion=$INSTALLER_VERSION /DMixpanelToken=$MIXPANEL_TOKEN
-# TODO: This is hideous--put this in a separate script to run
-CMD docker pull sagemath/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG} && \
-        ( [ -f "/images/${SAGE_IMAGE_NAME}-$(docker images -q sagemath/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG}).tar.bz2" ] || \
-        docker save sagemath/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG} | bzip2 -z > /images/${SAGE_IMAGE_NAME}-$(docker images -q sagemath/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG}).tar.bz2 ) && \
-	wine ../innosetup/ISCC.exe Toolbox.iss /DMyAppVersion=$INSTALLER_VERSION \
-        /DSageMathImageArchive="..\\images\\${SAGE_IMAGE_NAME}-$(docker images -q sagemath/${SAGE_IMAGE_NAME}:${SAGE_IMAGE_TAG}).tar.bz2"
+CMD ./build

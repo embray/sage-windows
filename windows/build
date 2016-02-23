@@ -1,0 +1,21 @@
+#/bin/sh
+docker pull ${SAGE_IMAGE_FULL}
+
+SAGE_IMAGE_DIGEST="$(docker images -q ${SAGE_IMAGE_FULL})"
+SAGE_IMAGE_PATH="/images/${SAGE_IMAGE_NAME}-${SAGE_IMAGE_DIGEST}.tar"
+
+if [ ! -f "${SAGE_IMAGE_PATH}" ]; then
+  # This step, if we get to it, can be rather time consuming. Provide a
+  # progress bar or something
+  echo "Exporting SageMath Docker image (${SAGE_IMAGE_DIGEST}); this"
+  echo "step can be time consuming so please be patient..."
+  docker save -o "$SAGE_IMAGE_PATH" "$SAGE_IMAGE_DIGEST"
+fi
+
+# Symlink the image to a standard name that's easy for the installer script
+# to pick up
+ln -s "${SAGE_IMAGE_PATH}" /bundle/sagemath.tar
+
+wine ../innosetup/ISCC.exe Toolbox.iss /DMyAppVersion=$INSTALLER_VERSION 
+
+exit $?

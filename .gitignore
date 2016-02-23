@@ -17,6 +17,7 @@ profile
 
 # output
 dist
+images
 
 # release
 .sign

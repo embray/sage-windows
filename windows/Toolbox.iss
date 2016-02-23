@@ -4,6 +4,7 @@
 #define MyAppContact "http://www.sagemath.org/"
 
 #define SageGroupName "SageMath"
+#define sageMathImage "..\bundle\sagemath.tar"
 #define b2dIsoPath "..\bundle\boot2docker.iso"
 #define dockerCli "..\bundle\docker.exe"
 #define dockerMachineCli "..\bundle\docker-machine.exe"
@@ -37,6 +38,7 @@ WizardImageStretch=yes
 UninstallDisplayIcon={app}\unins000.exe
 SetupIconFile=toolbox.ico
 ChangesEnvironment=true
+SetupLogging=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -60,19 +62,18 @@ Name: "SageMath"; Description: "SageMath image for Docker"; Types: full custom; 
 
 [Files]
 Source: "{#dockerCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
-Source: ".\Start-DockerMachine.ps1"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
 Source: "{#dockerMachineCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
 //Source: "{#dockerComposeCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
 Source: "{#b2dIsoPath}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"; AfterInstall: CopyBoot2DockerISO()
 Source: "{#virtualBoxCommon}"; DestDir: "{app}\installers\virtualbox"; Components: "VirtualBox"
 Source: "{#virtualBoxMsi}"; DestDir: "{app}\installers\virtualbox"; DestName: "virtualbox.msi"; AfterInstall: RunInstallVirtualBox(); Components: "VirtualBox"
-Source: "{#SageMathImageArchive}"; DestDir: "{app}\images"; DestName: sagemath.tar.bz2; Components: "SageMath"
-
-[UninstallRun]
-Filename: "{app}\docker-machine.exe"; Parameters: "rm -f default"
-
-[Registry]
-Root: HKCU; Subkey: "Environment"; ValueType:string; ValueName:"DOCKER_TOOLBOX_INSTALL_PATH"; ValueData:"{app}" ; Flags: preservestringtype ;
+Source: "{#sageMathImage}"; Components: "SageMath"; Flags: dontcopy
+// NOTE: This file has more to do with Docker than sage itself.  It's the
+// equivalent to start.sh which comes with Docker Toolbox, but written
+// for MS powershell, so that we don't strictly need to install Git
+// Eventually we could avoid shipping this if Docker Toolbox starts
+// including it; see https://github.com/docker/toolbox/pull/321 
+Source: ".\Start-DockerMachine.ps1"; DestDir: "{app}"; Flags: ignoreversion; Components: "SageMath"
 
 [Code]
 #include "base64.iss"
@@ -330,8 +331,7 @@ begin
   begin
     FileCopy(ExpandConstant('{userdocs}\..\.docker\machine\cache\boot2docker.iso'), ExpandConstant('{userdocs}\..\.docker\machine\machines\default\boot2docker.iso'), false)
     TrackEvent('VM Upgrade Succeeded');
-  end
-  else begin
+  end else begin
     TrackEvent('VM Upgrade Failed');
     MsgBox('VM Upgrade Failed because the VirtualBox VM could not be stopped.', mbCriticalError, MB_OK);
     Result := false
@@ -352,6 +352,64 @@ begin
 end;
 #include "modpath.iss"
 
+// This step starts the boot2docker VM with docker-machine
+// so that we can then issue commands to the docker-engine through
+// the docker client (namely load the sagemath image, which we then delete
+// from the installation)
+procedure RunInstallSageImage();
+var
+  ResultCode: Integer;
+  StatusFile: String;
+  MachineStatus: AnsiString;
+  StartMachine: Boolean;
+  CmdArgs: String;
+begin
+  TrackEvent('Installing the Sage image');
+  // TODO Maybe worth specifying a constant for this
+  WizardForm.StatusLabel.Caption := 'Extracting Sage image archive...';
+  ExtractTemporaryFile('sagemath.tar');
+
+  WizardForm.StatusLabel.Caption := 'Checking Docker VM status...';
+  // This is unfortunate...
+  StatusFile := ExpandConstant('{tmp}\docker-machine-status.txt');
+  CmdArgs := Format('/S /C ""%s\docker-machine.exe" status default > "%s""', [DockerPath(), StatusFile]);
+  Log(Format(ExpandConstant('Running {cmd} %s'), [CmdArgs]));
+  ExecAsOriginalUser(ExpandConstant('{cmd}'), CmdArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  WizardForm.StatusLabel.Caption := 'Checking Docker VM status... [OK]';
+  if (ResultCode = 0) then
+  begin
+    LoadStringFromFile(StatusFile, MachineStatus);
+    StartMachine := 0 <> CompareText('running', TrimRight(String(MachineStatus)));
+  end else begin
+    StartMachine := True
+  end;
+
+  if StartMachine then
+  begin
+    // TODO This could take a few minutes and appear to hang.  Figure out some way
+    // to update a progress bar, or at least display a spinner?
+    WizardForm.StatusLabel.Caption := 'Starting Docker VM...'
+    ExecAsOriginalUser(DockerPath() + '\docker-machine.exe', 'start default', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if (ResultCode = 0) then
+    begin
+      WizardForm.StatusLabel.Caption := 'Starting Docker VM... [OK]';
+    end else begin
+      // TODO: Update these messages
+      TrackEvent('VM Upgrade Failed');
+      MsgBox('VM Upgrade Failed because the Docker VM could not be started', mbCriticalError, MB_OK);
+      WizardForm.Close;
+      exit;
+    end;
+  end;
+
+  // TODO: This is also quite time consuming--try to provide a
+  // progress bar if possible...?
+  WizardForm.StatusLabel.Caption := 'Loading SageMath image into Docker...';
+  ExecAsOriginalUser(DockerPath() + '\docker.exe',
+                     ExpandConstant('load -i "{tmp}\sagemath.tar"'), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  WizardForm.StatusLabel.Caption := 'Loading SageMath image into Docker... [OK]';
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Success: Boolean;
@@ -371,6 +429,8 @@ begin
         end;
       end;
     end;
+
+    RunInstallSageImage();
 
     if Success then
       trackEvent('Installer Finished');

@@ -1,0 +1,12 @@
+#!/bin/sh
+
+if [ -z $SAGE_IMAGE_PATH ]; then
+	echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	echo "! An export of the sagemath Docker image must be created using the   !"
+	echo "! \`docker save\` command, and the path to that image must passed to   !"
+	echo "! this Dockerfile via the SAGE_IMAGE_PATH build-arg.                 !"
+	echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	exit 1
+else
+	exit 0
+fi

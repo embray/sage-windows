@@ -16,6 +16,9 @@ xcuserdata
 profile
 *.moved-aside
 
+# Toolbox input
+images
+
 # Toolbox output
 dist
 
