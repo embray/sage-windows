@@ -5,12 +5,7 @@
 
 #define SageGroupName "SageMath"
 #define sageMathImage "..\bundle\sagemath.tar"
-#define b2dIsoPath "..\bundle\boot2docker.iso"
-#define dockerCli "..\bundle\docker.exe"
-#define dockerMachineCli "..\bundle\docker-machine.exe"
-//#define dockerComposeCli "..\bundle\docker-compose.exe"
-#define virtualBoxCommon "..\bundle\common.cab"
-#define virtualBoxMsi "..\bundle\VirtualBox_amd64.msi"
+#define dockerToolbox "..\bundle\DockerToolbox.exe"
 
 #ifndef Compression
   #define Compression "lzma"
@@ -66,22 +61,16 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 Filename: "{win}\explorer.exe"; Parameters: "{userprograms}\{#SageGroupName}\"; Flags: postinstall skipifsilent; Description: "View Shortcuts in File Explorer"
 
 [Tasks]
-Name: desktopicon; Description: "{cm:CreateDesktopIcon}"
-Name: modifypath; Description: "Add docker binaries to &PATH"
-Name: upgradevm; Description: "Upgrade Boot2Docker VM"
+//Name: desktopicon; Description: "{cm:CreateDesktopIcon}"
+//Name: modifypath; Description: "Add docker binaries to &PATH"
+//Name: upgradevm; Description: "Upgrade Boot2Docker VM"
 
 [Components]
-Name: "VirtualBox"; Description: "VirtualBox"; Types: full custom; Flags: fixed disablenouninstallwarning
 Name: "Docker"; Description: "Docker for Windows" ; Types: full custom; Flags: fixed
 Name: "SageMath"; Description: "SageMath image for Docker"; Types: full custom; Flags: fixed
 
 [Files]
-Source: "{#dockerCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
-Source: "{#dockerMachineCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
-//Source: "{#dockerComposeCli}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"
-Source: "{#b2dIsoPath}"; DestDir: "{app}"; Flags: ignoreversion; Components: "Docker"; AfterInstall: CopyBoot2DockerISO()
-Source: "{#virtualBoxCommon}"; DestDir: "{app}\installers\virtualbox"; Components: "VirtualBox"
-Source: "{#virtualBoxMsi}"; DestDir: "{app}\installers\virtualbox"; DestName: "virtualbox.msi"; AfterInstall: RunInstallVirtualBox(); Components: "VirtualBox"
+Source: "{#dockerToolbox}"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall; Components: "Docker"; AfterInstall: RunInstallDocker
 Source: "{#sageMathImage}"; Components: "SageMath"; Flags: dontcopy
 // NOTE: This file has more to do with Docker than sage itself.  It's the
 // equivalent to start.sh which comes with Docker Toolbox, but written
@@ -96,8 +85,8 @@ Source: ".\Start-DockerMachine.ps1"; DestDir: "{app}"; Flags: ignoreversion; Com
 
 const
   // TODO: Maybe InnoSetup has a nicer way to do this built-in
-  VirtualBoxComponent = 0;
-  DockerComponent = 1;
+  DockerComponent = 0;
+  SageMathComponent = 1;
 
 var
   TrackingDisabled: Boolean;
@@ -179,6 +168,7 @@ begin
   );
 end;
 
+
 function VBoxPath(): String;
 begin
   if GetEnv('VBOX_INSTALL_PATH') <> '' then
@@ -186,6 +176,13 @@ begin
   else
     Result := GetEnv('VBOX_MSI_INSTALL_PATH')
 end;
+
+
+function NeedToInstallVBox(): Boolean;
+begin
+  Result := VBoxPath() = ''
+end;
+
 
 function DockerPath(): String;
 var
@@ -197,21 +194,19 @@ begin
     Result := '';
 end;
 
+
 function NeedToInstallDocker(): Boolean;
 begin
   // TODO: Should also attempt to run the docker CLI and check the
   // client and server versions (if the CLI even runs successfully)
-  if DockerPath() = '' then
-    Result := True
-  else
-    Result := False;
+  Result := DockerPath() = ''
 end;
+
 
 procedure InitializeWizard;
 var
   WelcomePage: TWizardPage;
   InstallDockerCaption: String;
-  InstallVBoxCaption: String;
 //  TrackingLabel: TLabel;
 begin
   TrackingDisabled := True;  // Remove this if we re-enable tracking
@@ -254,21 +249,8 @@ begin
   end;
 
   Wizardform.ComponentsList.ItemCaption[DockerComponent] := InstallDockerCaption;
-
-  InstallVBoxCaption := Wizardform.ComponentsList.ItemCaption[VirtualBoxComponent];
-  // Don't do this until we can compare versions
-  // Wizardform.ComponentsList.Checked[VirtualBoxComponent] := NeedToInstallVirtualBox();
-  if NeedToInstallVirtualBox() then
-  begin
-    Wizardform.ComponentsList.Checked[VirtualBoxComponent] := True;
-  end else begin
-    InstallVBoxCaption := InstallVBoxCaption + ' (already installed)';
-    Wizardform.ComponentsList.Checked[VirtualBoxComponent] := False;
-  end;
-
-  Wizardform.ComponentsList.ItemCaption[VirtualBoxComponent] := InstallVBoxCaption;
-    
 end;
+
 
 function InitializeSetup(): boolean;
 begin
@@ -294,68 +276,11 @@ begin
   Result := True
 end;
 
-procedure RunInstallVirtualBox();
-var
-  ResultCode: Integer;
-begin
-  WizardForm.FilenameLabel.Caption := 'installing VirtualBox'
-  if not Exec(ExpandConstant('msiexec'), ExpandConstant('/qn /i "{app}\installers\virtualbox\virtualbox.msi" /norestart'), '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-    MsgBox('virtualbox install failure', mbInformation, MB_OK);
-end;
 
-procedure CopyBoot2DockerISO();
-begin
-  WizardForm.FilenameLabel.Caption := 'copying boot2docker iso'
-  if not ForceDirectories(ExpandConstant('{userdocs}\..\.docker\machine\cache')) then
-      MsgBox('Failed to create docker machine cache dir', mbError, MB_OK);
-  if not FileCopy(ExpandConstant('{app}\boot2docker.iso'), ExpandConstant('{userdocs}\..\.docker\machine\cache\boot2docker.iso'), false) then
-      MsgBox('File moving failed!', mbError, MB_OK);
-end;
-
-function CanUpgradeVM(): Boolean;
-var
-  ResultCode: Integer;
-begin
-  if NeedToInstallVirtualBox() or not FileExists(ExpandConstant('{app}\docker-machine.exe')) then begin
-    Result := false
-    exit
-  end;
-
-  ExecAsOriginalUser(VBoxPath() + 'VBoxManage.exe', 'showvminfo default', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-  if ResultCode <> 0 then begin
-    Result := false
-    exit
-  end;
-
-  if not DirExists(ExpandConstant('{userdocs}\..\.docker\machine\machines\default')) then begin
-    Result := false
-    exit
-  end;
-
-  Result := true
-end;
-
-function UpgradeVM() : Boolean;
-var
-  ResultCode: Integer;
-begin
-  TrackEvent('VM Upgrade Started');
-  WizardForm.StatusLabel.Caption := 'Upgrading Docker Toolbox VM...'
-  ExecAsOriginalUser(ExpandConstant('{app}\docker-machine.exe'), 'stop default', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-  if (ResultCode = 0) or (ResultCode = 1) then
-  begin
-    FileCopy(ExpandConstant('{userdocs}\..\.docker\machine\cache\boot2docker.iso'), ExpandConstant('{userdocs}\..\.docker\machine\machines\default\boot2docker.iso'), false)
-    TrackEvent('VM Upgrade Succeeded');
-  end else begin
-    TrackEvent('VM Upgrade Failed');
-    MsgBox('VM Upgrade Failed because the VirtualBox VM could not be stopped.', mbCriticalError, MB_OK);
-    Result := false
-    WizardForm.Close;
-    exit;
-  end;
-  Result := true
-end;
-
+// This is used to modify the users PATH environment vvariable to include
+// the app's install path.  May still be useful if, for example, we want
+// too add a 'sage' command-line executable (in this case probably just a
+// batch script or something)
 const
   ModPathName = 'modifypath';
   ModPathType = 'user';
@@ -366,6 +291,36 @@ begin
   Result[0] := ExpandConstant('{app}');
 end;
 #include "modpath.iss"
+
+
+// Used to run the DockerToolbox installer; determines the appropriate tasks
+// and components to enable in the installer (currently Git will be installed
+// even though we don't need it--see https://github.com/docker/toolbox/pull/418
+procedure RunInstallDocker();
+var
+  DockerComponents: String;
+  ResultCode: Integer;
+  InstallArgs: String;
+begin
+  WizardForm.StatusLabel.Caption := 'Installing Docker...';
+  // Must install Docker and DockerMachine at a minimum, no compose,
+  // kitematic, etc.
+  DockerComponents := 'Docker,DockerMachine'
+
+  if NeedToInstallVBox() then
+  begin
+    DockerComponents := DockerComponents + ',VirtualBox'
+  end;
+
+  InstallArgs := Format('/SILENT /NOCANCEL /NOICONS /COMPONENTS="%s" /TASKS=""', [DockerComponents]);
+
+  // Run Docker installer in quiet mode (will show a progress bar but not
+  // ask for any user input); select only required components and disable
+  // all tasks and icons
+  Exec(ExpandConstant('{tmp}\DockerToolbox.exe'), InstallArgs, '',
+                      SW_SHOW, ewWaitUntilTerminated, ResultCode);
+end;
+
 
 // This step starts the boot2docker VM with docker-machine
 // so that we can then issue commands to the docker-engine through
@@ -409,9 +364,8 @@ begin
     begin
       WizardForm.StatusLabel.Caption := 'Starting Docker VM... [OK]';
     end else begin
-      // TODO: Update these messages
-      TrackEvent('VM Upgrade Failed');
-      MsgBox('VM Upgrade Failed because the Docker VM could not be started', mbCriticalError, MB_OK);
+      TrackEvent('VM start Failed');
+      MsgBox('The Docker VM could not be started', mbCriticalError, MB_OK);
       WizardForm.Close;
       exit;
     end;
@@ -435,15 +389,6 @@ begin
     trackEvent('Installing Files Succeeded');
     if IsTaskSelected(ModPathName) then
       ModPath();
-    if not WizardSilent() then
-    begin
-      if IsTaskSelected('upgradevm') then
-      begin
-        if CanUpgradeVM() then begin
-          Success := UpgradeVM();
-        end;
-      end;
-    end;
 
     RunInstallSageImage();
 

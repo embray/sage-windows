@@ -28,13 +28,8 @@ RUN cd innosetup && \
     wine "./innounp.exe" -e "is-unicode.exe"
 
 # installer components
-ENV INSTALLER_VERSION 1.10.2a
-ENV DOCKER_VERSION 1.10.2
-ENV DOCKER_MACHINE_VERSION 0.6.0
-ENV DOCKER_COMPOSE_VERSION 1.6.2
-ENV BOOT2DOCKER_ISO_VERSION $DOCKER_VERSION
-ENV VIRTUALBOX_VERSION 5.0.14
-ENV VIRTUALBOX_REVISION 105127
+ENV INSTALLER_VERSION 1.0
+ENV DOCKER_TOOLBOX_VERSION 1.10.2
 #ENV MIXPANEL_TOKEN c306ae65c33d7d09fe3e546f36493a6e
 
 # docker images
@@ -44,19 +39,7 @@ RUN mkdir /images
 
 RUN mkdir /bundle
 WORKDIR /bundle
-RUN curl -fsSL -o docker.exe "https://get.docker.com/builds/Windows/x86_64/docker-$DOCKER_VERSION.exe"
-
-RUN curl -fsSL -o docker-machine.exe "https://github.com/docker/machine/releases/download/v$DOCKER_MACHINE_VERSION/docker-machine-Windows-x86_64.exe"
-
-#RUN curl -fsSL -o docker-compose.exe "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-Windows-x86_64.exe"
-
-RUN curl -fsSL -o boot2docker.iso https://github.com/boot2docker/boot2docker/releases/download/v$BOOT2DOCKER_ISO_VERSION/boot2docker.iso
-
-RUN curl -fsSL -o virtualbox.exe "http://download.virtualbox.org/virtualbox/$VIRTUALBOX_VERSION/VirtualBox-$VIRTUALBOX_VERSION-$VIRTUALBOX_REVISION-Win.exe"
-RUN wine virtualbox.exe -extract -silent -path . && \
-	  rm virtualbox.exe && \
-	  rm *x86.msi && \
-	  mv *_amd64.msi VirtualBox_amd64.msi
+RUN curl -fsSL -o DockerToolbox.exe "https://github.com/docker/toolbox/releases/download/v${DOCKER_TOOLBOX_VERSION}/DockerToolbox-${DOCKER_TOOLBOX_VERSION}.exe"
 
 # Add installer resources
 COPY windows /installer
