@@ -188,10 +188,16 @@ function DockerPath(): String;
 var
   Path: String;
 begin
+  Result := ''
   if RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'DOCKER_TOOLBOX_INSTALL_PATH', Path) then
-    Result := Path
-  else
-    Result := '';
+  begin
+    // Just checking that this value exists is not enough, since Docker
+    // does not remove it when it is uninstalled; see
+    // https://github.com/docker/toolbox/pull/443
+    Path := RemoveBackslash(Path);
+    if FileExists(Path + '\docker.exe') and FileExists(Path + '\docker-machine.exe') then
+      Result := Path;
+  end;
 end;
 
 
