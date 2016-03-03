@@ -7,6 +7,21 @@
 #define sageMathImage "..\bundle\sagemath.tar"
 #define dockerToolbox "..\bundle\DockerToolbox.exe"
 
+#ifndef SageImageRepo
+  #define SageImageRepo "sagemath/sagemath-jupyter"
+#endif
+
+#ifndef SageImageTag
+  #define SageImageTag "latest"
+#endif
+
+// Really we need to know this in order to install the image
+// properly; we may be able to pass this in some other nicer way
+// but simply requiring it to be defined is fine for now.
+#ifndef SageImageDigest
+  #error The SHA1 digest for the sagemath Docker image to install must be passed to innosetup via /DSageImageDigest
+#endif
+
 #ifndef Compression
   #define Compression "lzma"
 #endif
@@ -403,6 +418,8 @@ begin
   if (ResultCode = 0) then
   begin
     WizardForm.StatusLabel.Caption := 'Loading SageMath image into Docker... [OK]';
+    RunDocker(Format('tag %s %s:%s', [ExpandConstant('{#SageImageDigest}'), ExpandConstant('{#SageImageRepo}'),
+                                      ExpandConstant('{#SageImageTag}')]));
   end else begin
     TrackEvent('Image load Failed');
     MsgBox(ExpandConstant('The {#SageGroupName} Docker image could not be loaded'), mbCriticalError, MB_OK);

@@ -16,7 +16,7 @@ fi
 # to pick up
 ln -s "${SAGE_IMAGE_PATH}" /bundle/sagemath.tar
 
-INNO_SETUP="ISCC.exe SageWindows.iss /DMyAppVersion=$INSTALLER_VERSION ${INNO_FLAGS}"
+INNO_SETUP="ISCC.exe SageWindows.iss /DMyAppVersion=$INSTALLER_VERSION /DSageImageRepo=${SAGE_IMAGE_REPO} /DSageImageTag=${SAGE_IMAGE_TAG} /DSageImageDigest=${SAGE_IMAGE_DIGEST} ${INNO_FLAGS}"
 
 
 echo "Running InnoSetup:"
