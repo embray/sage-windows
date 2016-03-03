@@ -293,6 +293,23 @@ end;
 #include "modpath.iss"
 
 
+// This procedure runs the 'docker' client command with the given
+// arguments.  Returns the return code of the command.
+// TODO: Maybe also return stdout/err
+function RunDocker(Args: String): Integer;
+var
+  ResultCode: Integer;
+begin
+  // The following mess is how we can run the docker.exe command while
+  // setting the appropriate environment variables given by
+  // 'docker-machine env' for the Docker client to connect to the correct
+  // host.
+  Args := Format('/S /C "(FOR /f "tokens=*" %%i IN (''"%s\docker-machine.exe" env default'') DO %%i) && "%s\docker.exe" %s"', [DockerPath(), DockerPath(), Args]);
+  ExecAsOriginalUser(ExpandConstant('{cmd}'), Args, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := ResultCode;
+end;
+
+
 // Used to run the DockerToolbox installer; determines the appropriate tasks
 // and components to enable in the installer (currently Git will be installed
 // even though we don't need it--see https://github.com/docker/toolbox/pull/418
@@ -374,9 +391,17 @@ begin
   // TODO: This is also quite time consuming--try to provide a
   // progress bar if possible...?
   WizardForm.StatusLabel.Caption := 'Loading SageMath image into Docker...';
-  ExecAsOriginalUser(DockerPath() + '\docker.exe',
-                     ExpandConstant('load -i "{tmp}\sagemath.tar"'), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  WizardForm.StatusLabel.Caption := 'Loading SageMath image into Docker... [OK]';
+
+  ResultCode := RunDocker(Format('load -i "%s"', [ExpandConstant('{tmp}\sagemath.tar')]));
+
+  if (ResultCode = 0) then
+  begin
+    WizardForm.StatusLabel.Caption := 'Loading SageMath image into Docker... [OK]';
+  end else begin
+    TrackEvent('Image load Failed');
+    MsgBox(ExpandConstant('The {#SageGroupName} Docker image could not be loaded'), mbCriticalError, MB_OK);
+    WizardForm.Close;
+  end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
