@@ -21,3 +21,6 @@ images
 
 # release
 .sign
+
+# vim detritus
+*.sw[po]
