@@ -314,6 +314,23 @@ end;
 #include "modpath.iss"
 
 
+// Run a shell command, capturing and returning stdout
+// Takes the same arguments as Exec but also returns
+// stdout as a string passed by reference as the last argument
+function ExecCaptureStdout(Cmd: String; CmdArgs: String; WorkingDir: String; const ShowCmd: Integer; const Wait: TExecWait; var ResultCode: Integer; var Stdout: String): Boolean;
+var
+  StdoutFile: String;
+  StdoutText: AnsiString;
+begin
+  StdoutFile := GenerateUniqueName(ExpandConstant('{tmp}'), '.txt');
+  CmdArgs := Format('/S /C ""%s" %s > "%s""', [Cmd, CmdArgs, StdoutFile]);
+  Log(Format(ExpandConstant('Running "%s" %s'), [Cmd, CmdArgs]));
+  Result := ExecAsOriginalUser(ExpandConstant('{cmd}'), CmdArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  LoadStringFromFile(StdoutFile, StdoutText);
+  Stdout := String(StdoutText);
+end;
+
+
 // This procedure runs the 'docker' client command with the given
 // arguments.  Returns the return code of the command.
 // TODO: Maybe also return stdout/err
@@ -328,6 +345,14 @@ begin
   Args := Format('/S /C "(FOR /f "tokens=*" %%i IN (''"%s\docker-machine.exe" env default'') DO %%i) && "%s\docker.exe" %s"', [DockerPath(), DockerPath(), Args]);
   ExecAsOriginalUser(ExpandConstant('{cmd}'), Args, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := ResultCode;
+end;
+
+
+function RunDockerMachine(Args: String; var ResultCode: Integer; var Stdout: String): Boolean;
+begin
+  Result := ExecCaptureStdout(Format('%s\docker-machine.exe', [DockerPath()]),
+                              Args, '', SW_HIDE, ewWaitUntilTerminated,
+			      ResultCode, Stdout);
 end;
 
 
@@ -360,6 +385,25 @@ begin
 end;
 
 
+
+// Returns true if the Docker VM is up and running
+function IsDockerMachineRunning(): Boolean;
+var
+  ResultCode: Integer;
+  MachineStatus: String;
+begin
+  WizardForm.StatusLabel.Caption := 'Checking Docker VM status...';
+  RunDockerMachine('status default', ResultCode, MachineStatus);
+  WizardForm.StatusLabel.Caption := 'Checking Docker VM status... [OK]';
+  if (ResultCode = 0) then
+  begin
+    Result := 0 = CompareText('running', TrimRight(MachineStatus));
+  end else begin
+    Result := False
+  end;
+end;
+
+
 // This step starts the boot2docker VM with docker-machine
 // so that we can then issue commands to the docker-engine through
 // the docker client (namely load the sagemath image, which we then delete
@@ -367,37 +411,19 @@ end;
 procedure RunInstallSageImage();
 var
   ResultCode: Integer;
-  StatusFile: String;
-  MachineStatus: AnsiString;
-  StartMachine: Boolean;
-  CmdArgs: String;
+  Stdout: String;
 begin
   TrackEvent('Installing the Sage image');
   // TODO Maybe worth specifying a constant for this
   WizardForm.StatusLabel.Caption := 'Extracting Sage image archive...';
   ExtractTemporaryFile('sagemath.tar');
 
-  WizardForm.StatusLabel.Caption := 'Checking Docker VM status...';
-  // This is unfortunate...
-  StatusFile := ExpandConstant('{tmp}\docker-machine-status.txt');
-  CmdArgs := Format('/S /C ""%s\docker-machine.exe" status default > "%s""', [DockerPath(), StatusFile]);
-  Log(Format(ExpandConstant('Running {cmd} %s'), [CmdArgs]));
-  ExecAsOriginalUser(ExpandConstant('{cmd}'), CmdArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  WizardForm.StatusLabel.Caption := 'Checking Docker VM status... [OK]';
-  if (ResultCode = 0) then
-  begin
-    LoadStringFromFile(StatusFile, MachineStatus);
-    StartMachine := 0 <> CompareText('running', TrimRight(String(MachineStatus)));
-  end else begin
-    StartMachine := True
-  end;
-
-  if StartMachine then
+  if not IsDockerMachineRunning() then
   begin
     // TODO This could take a few minutes and appear to hang.  Figure out some way
     // to update a progress bar, or at least display a spinner?
     WizardForm.StatusLabel.Caption := 'Starting Docker VM...'
-    ExecAsOriginalUser(DockerPath() + '\docker-machine.exe', 'start default', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    RunDockerMachine('start default', ResultCode, Stdout);
     if (ResultCode = 0) then
     begin
       WizardForm.StatusLabel.Caption := 'Starting Docker VM... [OK]';
