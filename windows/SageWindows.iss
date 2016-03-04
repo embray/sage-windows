@@ -6,6 +6,7 @@
 #define SageGroupName "SageMath"
 #define sageMathImage "..\bundle\sagemath.tar"
 #define dockerToolbox "..\bundle\DockerToolbox.exe"
+#define dockerVMName "default"
 
 #ifndef SageImageRepo
   #define SageImageRepo "sagemath/sagemath-jupyter"
@@ -342,7 +343,7 @@ begin
   // setting the appropriate environment variables given by
   // 'docker-machine env' for the Docker client to connect to the correct
   // host.
-  Args := Format('/S /C "(FOR /f "tokens=*" %%i IN (''"%s\docker-machine.exe" env default'') DO %%i) && "%s\docker.exe" %s"', [DockerPath(), DockerPath(), Args]);
+  Args := Format('/S /C "(FOR /f "tokens=*" %%i IN (''"%s\docker-machine.exe" env %s'') DO %%i) && "%s\docker.exe" %s"', [DockerPath(), ExpandConstant('{#dockerVMName}'), DockerPath(), Args]);
   ExecAsOriginalUser(ExpandConstant('{cmd}'), Args, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := ResultCode;
 end;
@@ -393,7 +394,7 @@ var
   MachineStatus: String;
 begin
   WizardForm.StatusLabel.Caption := 'Checking Docker VM status...';
-  RunDockerMachine('status default', ResultCode, MachineStatus);
+  RunDockerMachine(ExpandConstant('status {#dockerVMName}'), ResultCode, MachineStatus);
   WizardForm.StatusLabel.Caption := 'Checking Docker VM status... [OK]';
   if (ResultCode = 0) then
   begin
@@ -423,7 +424,7 @@ begin
     // TODO This could take a few minutes and appear to hang.  Figure out some way
     // to update a progress bar, or at least display a spinner?
     WizardForm.StatusLabel.Caption := 'Starting Docker VM...'
-    RunDockerMachine('start default', ResultCode, Stdout);
+    RunDockerMachine(ExpandConstant('start {#dockerVMName}'), ResultCode, Stdout);
     if (ResultCode = 0) then
     begin
       WizardForm.StatusLabel.Caption := 'Starting Docker VM... [OK]';
