@@ -152,6 +152,11 @@ var
   payload: String;
   WinHttpReq: Variant;
 begin
+  if Length(properties) > 0 then
+    Log(Format('%s:%s%s', [name, #13#10, properties]))
+  else
+    Log(name);
+
   if TrackingDisabled or WizardSilent() then
     exit;
 
@@ -461,13 +466,13 @@ begin
   Success := True;
   if CurStep = ssPostInstall then
   begin
-    trackEvent('Installing Files Succeeded');
+    TrackEvent('Installing Files Succeeded');
     if IsTaskSelected(ModPathName) then
       ModPath();
 
     RunInstallSageImage();
 
     if Success then
-      trackEvent('Installer Finished');
+      TrackEvent('Installer Finished');
   end;
 end;
