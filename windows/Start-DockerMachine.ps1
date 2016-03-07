@@ -11,7 +11,7 @@ Param
     [string]$vm = 'default'
 )
 
-$dm = Join-Path -Path $PSScriptRoot -ChildPath 'docker-machine.exe'
+$dm = Join-Path -Path $env:DOCKER_TOOLBOX_INSTALL_PATH -ChildPath 'docker-machine.exe'
 
 Write-Verbose -Message "VM: $vm"
 Write-Verbose -Message "docker-machine: $dm"
