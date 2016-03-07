@@ -360,7 +360,15 @@ function RunDockerMachine(Args: String; var ResultCode: Integer; var Stdout: Str
 begin
   Result := ExecCaptureStdout(Format('%s\docker-machine.exe', [DockerPath()]),
                               Args, '', SW_HIDE, ewWaitUntilTerminated,
-			      ResultCode, Stdout);
+                              ResultCode, Stdout);
+end;
+
+
+function RunVBoxManage(Args: String; var ResultCode: Integer): Boolean;
+begin
+  Result := ExecAsOriginalUser(Format('%s\VBoxManage.exe', [VBoxPath()]),
+                               Args, '', SW_HIDE, ewWaitUntilTerminated,
+                               ResultCode);
 end;
 
 
@@ -394,6 +402,47 @@ end;
 
 
 
+// Many of the following routines are almost verbatim from the
+// Start-DockerMachine script; might be nice to not have this completely
+// duplicated, but the existing script doesn't integrate well into the
+// installer either...
+
+
+// Returns true if the Docker VM has been created
+function IsDockerMachineCreated(): Boolean;
+var
+  ResultCode: Integer;
+  Stdout: String;
+  VMok: Boolean;
+begin
+  VMok := false;
+  WizardForm.StatusLabel.Caption := 'Checking for Docker VM...'
+  RunVBoxManage(ExpandConstant('showvminfo {#dockerVMName}'), ResultCode);
+
+  if (ResultCode = 0) then
+  begin
+    VMok := true;
+    // Docker's uninstall doesn't always stop / remove the virtual box VM
+    // so it might be report a good status.  But to be really sure try
+    // running docker-machine status--this will fail either if the
+    // VM doesn't exist or is in error state as far as Docker's bookkeeping
+    // is concerned
+    RunDockerMachine(ExpandConstant('status {#dockerVMName}'), ResultCode,
+                     Stdout);
+    VMok := (VMok and (ResultCode = 0));
+  end;
+
+  if VMok then
+  begin
+    WizardForm.StatusLabel.Caption := 'Checking for Docker VM... [OK]';
+    Result := true;
+  end else begin
+    WizardForm.StatusLabel.Caption := 'Checking for Docker VM... [MISSING]';
+    Result := false;
+  end;
+end;
+
+
 // Returns true if the Docker VM is up and running
 function IsDockerMachineRunning(): Boolean;
 var
@@ -412,37 +461,64 @@ begin
 end;
 
 
-// This step starts the boot2docker VM with docker-machine
-// so that we can then issue commands to the docker-engine through
-// the docker client (namely load the sagemath image, which we then delete
-// from the installation)
-procedure RunInstallSageImage();
+procedure CreateDockerMachine();
 var
   ResultCode: Integer;
   Stdout: String;
 begin
-  TrackEvent('Installing the Sage image');
-  // TODO Maybe worth specifying a constant for this
-  WizardForm.StatusLabel.Caption := 'Extracting Sage image archive...';
-  ExtractTemporaryFile('sagemath.tar');
+  // Clean up dangling references to a previous instance of the VM, if there
+  // are any
+  WizardForm.StatusLabel.Caption := 'Initializing Docker VM...';
+  // Docker uninstall can still leave an existing VM running so power it off first
+  // or all of these commands will fail.
+  RunVBoxManage(ExpandConstant('controlvm {#dockerVMName} poweroff'), ResultCode);
+  RunDockerMachine(ExpandConstant('rm -f {#dockerVMName}'), ResultCode, Stdout);
+  // Strangely Inno Setup does not normally have a constant just for the
+  // user's home directory
+  DelTree(ExpandConstant('{userdocs}\..\.docker\machine\machines\{#dockerVMName}'),
+                         true, true, true);
 
-  if not IsDockerMachineRunning() then
+  RunDockerMachine(ExpandConstant('create -d virtualbox {#dockerVMName}'),
+                   ResultCode, Stdout);
+  if (ResultCode = 0) then
   begin
-    // TODO This could take a few minutes and appear to hang.  Figure out some way
-    // to update a progress bar, or at least display a spinner?
-    WizardForm.StatusLabel.Caption := 'Starting Docker VM...'
-    RunDockerMachine(ExpandConstant('start {#dockerVMName}'), ResultCode, Stdout);
-    if (ResultCode = 0) then
-    begin
-      WizardForm.StatusLabel.Caption := 'Starting Docker VM... [OK]';
-    end else begin
-      TrackEvent('VM start Failed');
-      MsgBox('The Docker VM could not be started', mbCriticalError, MB_OK);
-      WizardForm.Close;
-      exit;
-    end;
+    WizardForm.StatusLabel.Caption := 'Initializing Docker VM... [OK]';
+  end else begin
+    TrackEvent('VM creation Failed: ' + Stdout);
+    MsgBox('The Docker VM could not be created', mbCriticalError, MB_OK);
+    WizardForm.Close;
+    exit;
   end;
+end;
 
+
+procedure StartDockerMachine();
+var
+  ResultCode: Integer;
+  Stdout: String;
+begin
+  // TODO This could take a few minutes and appear to hang.  Figure out some way
+  // to update a progress bar, or at least display a spinner?
+  WizardForm.StatusLabel.Caption := 'Starting Docker VM...'
+  RunDockerMachine(ExpandConstant('start {#dockerVMName}'), ResultCode, Stdout);
+  if (ResultCode = 0) then
+  begin
+    RunDockerMachine(ExpandConstant('regenerate-certs -f {#dockerVMName}'),
+                     ResultCode, Stdout);
+    WizardForm.StatusLabel.Caption := 'Starting Docker VM... [OK]';
+  end else begin
+    TrackEvent('VM start Failed: ' + Stdout);
+    MsgBox('The Docker VM could not be started', mbCriticalError, MB_OK);
+    WizardForm.Close;
+    exit;
+  end;
+end;
+
+
+procedure LoadSageImage();
+var
+  ResultCode: Integer;
+begin
   // TODO: This is also quite time consuming--try to provide a
   // progress bar if possible...?
   WizardForm.StatusLabel.Caption := 'Loading SageMath image into Docker...';
@@ -460,6 +536,29 @@ begin
     WizardForm.Close;
   end;
 end;
+
+
+// This step starts the boot2docker VM with docker-machine
+// so that we can then issue commands to the docker-engine through
+// the docker client (namely load the sagemath image, which we then delete
+// from the installation)
+procedure RunInstallSageImage();
+begin
+  TrackEvent('Installing the Sage image');
+  // TODO Maybe worth specifying a constant for this
+  WizardForm.StatusLabel.Caption := 'Extracting Sage image archive...';
+  ExtractTemporaryFile('sagemath.tar');
+  WizardForm.StatusLabel.Caption := 'Extracting Sage image archive... [OK]';
+
+  if not IsDockerMachineCreated() then
+    CreateDockerMachine();
+
+  if not IsDockerMachineRunning() then
+    StartDockerMachine();
+
+  LoadSageImage();
+end;
+
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
