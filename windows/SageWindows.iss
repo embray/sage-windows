@@ -325,50 +325,80 @@ end;
 // Run a shell command, capturing and returning stdout
 // Takes the same arguments as Exec but also returns
 // stdout as a string passed by reference as the last argument
-function ExecCaptureStdout(Cmd: String; CmdArgs: String; WorkingDir: String; const ShowCmd: Integer; const Wait: TExecWait; var ResultCode: Integer; var Stdout: String): Boolean;
+// The ProgressHold argument, if true, sets the progress bar to marquee
+// mode and asks the user to be patient--originally tried to do this
+// as a wrapper function but I can't figure out how to do that with Inno
+// Setup's pascal dialect... :(
+function ExecEx(Cmd: String; CmdArgs: String; WorkingDir: String; const ShowCmd: Integer; const Wait: TExecWait; var ResultCode: Integer; var Stdout: String; ProgressHold: Boolean): Boolean;
 var
   StdoutFile: String;
   StdoutText: AnsiString;
+  Caption: String;
+  Progress: TNewProgressBar;
+  ProgressPosition: Longint;
+  ProgressStyle: TNewProgressBarStyle;
 begin
   StdoutFile := GenerateUniqueName(ExpandConstant('{tmp}'), '.txt');
   CmdArgs := Format('/S /C ""%s" %s > "%s""', [Cmd, CmdArgs, StdoutFile]);
+  Caption := WizardForm.StatusLabel.Caption;
+  Progress := WizardForm.ProgressGauge;
+  ProgressPosition := Progress.Position;
   Log(Format(ExpandConstant('Running "%s" %s'), [Cmd, CmdArgs]));
-  Result := ExecAsOriginalUser(ExpandConstant('{cmd}'), CmdArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  LoadStringFromFile(StdoutFile, StdoutText);
-  Stdout := String(StdoutText);
+
+  try
+    if ProgressHold then
+    begin
+      WizardForm.StatusLabel.Caption := Caption + ' (please be patient)';
+      Progress.Style := npbstMarquee;
+    end;
+
+    Result := ExecAsOriginalUser(ExpandConstant('{cmd}'), CmdArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    LoadStringFromFile(StdoutFile, StdoutText);
+    Stdout := String(StdoutText);
+  finally
+    if ProgressHold then
+    begin
+      Progress.Position := ProgressPosition;
+      ProgressStyle := ProgressStyle;
+      WizardForm.StatusLabel.Caption := Caption;
+    end;
+  end;
 end;
 
 
 // This procedure runs the 'docker' client command with the given
 // arguments.  Returns the return code of the command.
 // TODO: Maybe also return stdout/err
-function RunDocker(Args: String): Integer;
+function RunDocker(Args: String; Long: Boolean): Integer;
 var
   ResultCode: Integer;
+  Stdout: String;
 begin
   // The following mess is how we can run the docker.exe command while
   // setting the appropriate environment variables given by
   // 'docker-machine env' for the Docker client to connect to the correct
   // host.
   Args := Format('/S /C "(FOR /f "tokens=*" %%i IN (''"%s\docker-machine.exe" env %s'') DO %%i) && "%s\docker.exe" %s"', [DockerPath(), ExpandConstant('{#dockerVMName}'), DockerPath(), Args]);
-  ExecAsOriginalUser(ExpandConstant('{cmd}'), Args, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  ExecEx(ExpandConstant('{cmd}'), Args, '', SW_HIDE, ewWaitUntilTerminated, ResultCode, Stdout, Long);
   Result := ResultCode;
 end;
 
 
-function RunDockerMachine(Args: String; var ResultCode: Integer; var Stdout: String): Boolean;
+function RunDockerMachine(Args: String; var ResultCode: Integer; var Stdout: String; Long: Boolean): Boolean;
 begin
-  Result := ExecCaptureStdout(Format('%s\docker-machine.exe', [DockerPath()]),
-                              Args, '', SW_HIDE, ewWaitUntilTerminated,
-                              ResultCode, Stdout);
+  Result := ExecEx(Format('%s\docker-machine.exe', [DockerPath()]),
+                          Args, '', SW_HIDE, ewWaitUntilTerminated,
+                          ResultCode, Stdout, Long);
 end;
 
 
 function RunVBoxManage(Args: String; var ResultCode: Integer): Boolean;
+var
+  Stdout: String;
 begin
-  Result := ExecAsOriginalUser(Format('%s\VBoxManage.exe', [VBoxPath()]),
+  Result := ExecEx(Format('%s\VBoxManage.exe', [VBoxPath()]),
                                Args, '', SW_HIDE, ewWaitUntilTerminated,
-                               ResultCode);
+                               ResultCode, Stdout, False);
 end;
 
 
@@ -428,7 +458,7 @@ begin
     // VM doesn't exist or is in error state as far as Docker's bookkeeping
     // is concerned
     RunDockerMachine(ExpandConstant('status {#dockerVMName}'), ResultCode,
-                     Stdout);
+                     Stdout, False);
     VMok := (VMok and (ResultCode = 0));
   end;
 
@@ -450,7 +480,7 @@ var
   MachineStatus: String;
 begin
   WizardForm.StatusLabel.Caption := 'Checking Docker VM status...';
-  RunDockerMachine(ExpandConstant('status {#dockerVMName}'), ResultCode, MachineStatus);
+  RunDockerMachine(ExpandConstant('status {#dockerVMName}'), ResultCode, MachineStatus, False);
   WizardForm.StatusLabel.Caption := 'Checking Docker VM status... [OK]';
   if (ResultCode = 0) then
   begin
@@ -472,14 +502,14 @@ begin
   // Docker uninstall can still leave an existing VM running so power it off first
   // or all of these commands will fail.
   RunVBoxManage(ExpandConstant('controlvm {#dockerVMName} poweroff'), ResultCode);
-  RunDockerMachine(ExpandConstant('rm -f {#dockerVMName}'), ResultCode, Stdout);
+  RunDockerMachine(ExpandConstant('rm -f {#dockerVMName}'), ResultCode, Stdout, False);
   // Strangely Inno Setup does not normally have a constant just for the
   // user's home directory
   DelTree(ExpandConstant('{userdocs}\..\.docker\machine\machines\{#dockerVMName}'),
                          true, true, true);
 
   RunDockerMachine(ExpandConstant('create -d virtualbox {#dockerVMName}'),
-                   ResultCode, Stdout);
+                   ResultCode, Stdout, True);
   if (ResultCode = 0) then
   begin
     WizardForm.StatusLabel.Caption := 'Initializing Docker VM... [OK]';
@@ -500,11 +530,11 @@ begin
   // TODO This could take a few minutes and appear to hang.  Figure out some way
   // to update a progress bar, or at least display a spinner?
   WizardForm.StatusLabel.Caption := 'Starting Docker VM...'
-  RunDockerMachine(ExpandConstant('start {#dockerVMName}'), ResultCode, Stdout);
+  RunDockerMachine(ExpandConstant('start {#dockerVMName}'), ResultCode, Stdout, True);
   if (ResultCode = 0) then
   begin
     RunDockerMachine(ExpandConstant('regenerate-certs -f {#dockerVMName}'),
-                     ResultCode, Stdout);
+                     ResultCode, Stdout, True);
     WizardForm.StatusLabel.Caption := 'Starting Docker VM... [OK]';
   end else begin
     TrackEvent('VM start Failed: ' + Stdout);
@@ -523,13 +553,13 @@ begin
   // progress bar if possible...?
   WizardForm.StatusLabel.Caption := 'Loading SageMath image into Docker...';
 
-  ResultCode := RunDocker(Format('load -i "%s"', [ExpandConstant('{tmp}\sagemath.tar')]));
+  ResultCode := RunDocker(Format('load -i "%s"', [ExpandConstant('{tmp}\sagemath.tar')]), True);
 
   if (ResultCode = 0) then
   begin
     WizardForm.StatusLabel.Caption := 'Loading SageMath image into Docker... [OK]';
     RunDocker(Format('tag %s %s:%s', [ExpandConstant('{#SageImageDigest}'), ExpandConstant('{#SageImageRepo}'),
-                                      ExpandConstant('{#SageImageTag}')]));
+                                      ExpandConstant('{#SageImageTag}')]), True);
   end else begin
     TrackEvent('Image load Failed');
     MsgBox(ExpandConstant('The {#SageGroupName} Docker image could not be loaded'), mbCriticalError, MB_OK);
