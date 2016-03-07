@@ -195,7 +195,9 @@ begin
   if GetEnv('VBOX_INSTALL_PATH') <> '' then
     Result := GetEnv('VBOX_INSTALL_PATH')
   else
-    Result := GetEnv('VBOX_MSI_INSTALL_PATH')
+    Result := GetEnv('VBOX_MSI_INSTALL_PATH');
+
+  Result := RemoveBackslash(Result);
 end;
 
 
